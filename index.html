@@ -187,6 +187,18 @@
   .toast{position:fixed; bottom:22px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:12px 20px; border-radius:10px; font-size:13px; font-weight:600; box-shadow:0 10px 30px rgba(0,0,0,.25); opacity:0; transition:.25s; pointer-events:none; z-index:50}
   .toast.show{opacity:1; bottom:30px}
   @media (max-width:960px){ .grid{grid-template-columns:1fr} .panel-wrap{position:static} .stats{grid-template-columns:repeat(2,1fr)} .r3{grid-template-columns:1fr 1fr} .capa{grid-template-columns:1fr} .rep-meta{grid-template-columns:1fr 1fr} .report{padding:22px} .dimnav{grid-template-columns:repeat(3,1fr)} }
+  @media (max-width:820px){
+    table.log{ border:0; box-shadow:none; background:transparent; }
+    table.log thead{ display:none; }
+    table.log tbody, table.log tr, table.log td{ display:block; width:100%; }
+    table.log tr{ border:1px solid var(--line); border-radius:10px; margin-bottom:10px; background:#fff; box-shadow:var(--shadow); overflow:hidden; }
+    table.log td{ display:flex; align-items:center; justify-content:space-between; gap:12px; border:0; border-bottom:1px solid #EEF0F3; padding:9px 14px; font-size:13.5px; text-align:right; }
+    table.log tr td:last-child{ border-bottom:0; }
+    table.log td::before{ content:attr(data-label); font-weight:800; color:var(--muted); font-size:12px; text-align:left; flex:none; }
+    table.log td.mono{ font-size:12.5px; }
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .log-actions h1{ font-size:16px; }
+  }
   @media (prefers-reduced-motion:reduce){ *{transition:none!important} }
   @media print{ header.top,nav.tabs,.rep-actions,.demo-row{display:none!important} body{background:#fff} main{max-width:none;padding:0} #view-audit,#view-register{display:none!important} .report{border:0;box-shadow:none;padding:0} .capa input{border:0;border-bottom:1px solid #999} }
 </style>
@@ -519,7 +531,15 @@ function renderRegister(){
   if(!n){ body.innerHTML='<div class="empty"><b>아직 확정된 감사가 없습니다.</b>감사 수행에서 통제를 평가하고 ‘감사 확정·기록’을 누르면 대장에 축적됩니다.</div>'; return; }
   const vlabel={pass:"적합",cond:"조건부 적합",fail:"부적합"}, tl={low:"저",mid:"중",high:"고"};
   body.innerHTML='<table class="log"><thead><tr><th>확정일시</th><th>피감기관</th><th>대상 시스템</th><th>영역</th><th>위험</th><th>의견</th><th>중대/경미</th></tr></thead><tbody>'+
-    log.map(r=>'<tr><td class="mono">'+fmtDate(r.ts)+'</td><td><b>'+esc(r.auditee||"—")+'</b></td><td>'+esc(r.system||"—")+'</td><td>'+esc(r.domain)+'</td><td>'+(tl[r.tier]||"—")+'</td><td><span class="vpill '+r.op+'">'+(vlabel[r.op]||"—")+'</span></td><td class="mono">'+(r.major||0)+' / '+(r.minor||0)+'</td></tr>').join("")+'</tbody></table>';
+    log.map(r=>'<tr>'+
+      '<td class="mono" data-label="확정일시">'+fmtDate(r.ts)+'</td>'+
+      '<td data-label="피감기관"><b>'+esc(r.auditee||"—")+'</b></td>'+
+      '<td data-label="대상 시스템">'+esc(r.system||"—")+'</td>'+
+      '<td data-label="영역">'+esc(r.domain)+'</td>'+
+      '<td data-label="위험">'+(tl[r.tier]||"—")+'</td>'+
+      '<td data-label="의견"><span class="vpill '+r.op+'">'+(vlabel[r.op]||"—")+'</span></td>'+
+      '<td class="mono" data-label="중대/경미">'+(r.major||0)+' / '+(r.minor||0)+'</td>'+
+    '</tr>').join("")+'</tbody></table>';
 }
 function saveAudit(){
   const R=window.__R; if(!R||!R.t.ok||!(S.eng.system&&S.eng.system.trim())||R.rated===0) return;
