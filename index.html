@@ -211,6 +211,32 @@
   .rv-explain{font-size:12px;color:var(--muted);margin-top:9px;line-height:1.55;background:#fff;border:1px solid var(--line);border-radius:8px;padding:9px 11px}
   .rv-explain b{color:var(--ink)}
   .modal-scroll{max-height:80vh;overflow:auto}
+  /* v2: 온보딩 히어로 */
+  .hero{background:linear-gradient(135deg,#16181D 0%,#202b34 100%);border-color:#2c3947;overflow:hidden;position:relative}
+  .hero::after{content:"";position:absolute;right:-40px;top:-40px;width:180px;height:180px;background:radial-gradient(circle,rgba(18,161,135,.22),transparent 70%);pointer-events:none}
+  .hero .hbadge{display:inline-block;font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#3fd0b4;background:rgba(18,161,135,.16);padding:4px 11px;border-radius:20px}
+  .hero h1{color:#fff;font-size:20px;line-height:1.34;margin:11px 0 6px;font-weight:800}
+  .hero h1 .hl{color:#3fd0b4}
+  .hero .hsub{color:#aeb8c2;font-size:12.5px;line-height:1.6}
+  .pipe{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:17px 0 3px}
+  .pstep{background:rgba(255,255,255,.05);border:1px solid #33414f;border-radius:10px;padding:8px 12px;display:flex;flex-direction:column;gap:1px;min-width:74px}
+  .pstep b{color:#fff;font-size:12.5px;font-weight:700} .pstep span{font-size:10px;color:#8fa0ad}
+  .parw{color:#5a6b78;font-weight:800;font-size:13px}
+  .hero-cta{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .startlist{list-style:none;margin:0;padding:0;counter-reset:sl}
+  .startlist li{position:relative;padding:0 0 12px 34px;font-size:12.5px;color:var(--muted);line-height:1.55}
+  .startlist li:last-child{padding-bottom:0}
+  .startlist li::before{counter-increment:sl;content:counter(sl);position:absolute;left:0;top:-1px;width:22px;height:22px;border-radius:50%;background:var(--tealsoft);color:var(--teal);border:1px solid var(--tealline);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .startlist li.done::before{content:"✓";background:var(--teal);color:#fff;border-color:var(--teal)}
+  .startlist b{color:var(--ink);display:block;margin-bottom:1px}
+  .emptybig{text-align:center;padding:22px 14px;color:var(--muted2);font-size:12.5px;line-height:1.6}
+  .emptybig .ei{font-size:26px;opacity:.5;display:block;margin-bottom:6px}
+  /* v2: 프로젝트 없음 환영 화면 */
+  .welcome-wrap{max-width:900px;margin:0 auto}
+  .wgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+  .wgrid .wic{font-size:24px;margin-bottom:6px}
+  @media(max-width:760px){ .wgrid{grid-template-columns:1fr} }
+
   .modal code{background:var(--panel);padding:1px 5px;border-radius:4px;font-size:11px}
 </style>
 </head>
@@ -384,16 +410,17 @@ function persist(){
   else { try{ localStorage.setItem(LSK,JSON.stringify({projects:state.projects,probes:state.probes})); }catch(e){} }
 }
 function ensureProjects(){
-  if(!state.projects||state.projects.length===0){ state.projects=JSON.parse(JSON.stringify(PRESET_PROJECTS)); persist(); }
-  if(!state.projId||!state.projects.find(p=>p.id===state.projId)) state.projId=state.projects[0].id;
+  if(state.projId && state.projects.find(p=>p.id===state.projId)) return;
+  state.projId = state.projects.length ? state.projects[0].id : null;
 }
 function loadData(){
   if(fbReady()){
     try{
       firebase.initializeApp(FIREBASE_CONFIG); DB=firebase.database();
       DB.ref(".info/connected").on("value",s=>setSync(!!s.val(),s.val()?"팀 공유 · 동기화됨":"연결 대기"));
-      DB.ref("st2/projects").on("value",snap=>{ state.projects=fromMap(snap.val()); refresh(); });
-      DB.ref("st2/probes").on("value",snap=>{ state.probes=fromMap(snap.val()); refresh(); });
+      DB.ref("st2/projects").on("value",snap=>{ state.projects=fromMap(snap.val()); refresh(); }, e=>{ refresh(); });
+      DB.ref("st2/probes").on("value",snap=>{ state.probes=fromMap(snap.val()); refresh(); }, e=>{});
+      refresh(); // 즉시 페인트: 리스너가 늦거나 막혀도 화면이 비지 않도록
       return;
     }catch(e){ DB=null; }
   }
@@ -520,7 +547,10 @@ function projStats(projId){
 
 /* ---------- 프로젝트 바 ---------- */
 function renderProjBar(){
-  const sel=$("projSel"); sel.innerHTML=state.projects.map(p=>`<option value="${p.id}" ${p.id===state.projId?"selected":""}>${esc(p.name)}</option>`).join("");
+  const sel=$("projSel");
+  if(!state.projects.length){ sel.innerHTML=`<option>등록된 프로젝트 없음</option>`; sel.disabled=true; return; }
+  sel.disabled=false;
+  sel.innerHTML=state.projects.map(p=>`<option value="${p.id}" ${p.id===state.projId?"selected":""}>${esc(p.name)}</option>`).join("");
 }
 
 /* ==================================================================
@@ -533,16 +563,42 @@ function renderDash(){
   const maxAx=Math.max(1,...AX_ORDER.map(a=>st.axisCount[a]));
   const dist=AX_ORDER.map(a=>{const ax=AXES[a];const c=st.axisCount[a];
     return `<div class="dr ${ax.cls}"><span class="dnm"><span class="axletter">${a}</span>${esc(ax.kr)} · ${esc(ax.name)}</span><span class="dbar"><i style="width:${Math.round(c/maxAx*100)}%"></i></span><span class="dct">${c}</span></div>`;}).join("");
+  const onboarding = st.total===0;
   const recent=state.probes.filter(p=>p.projId===proj.id).sort((a,b)=>b.createdAt-a.createdAt).slice(0,6).map(p=>{
-    const tag=resultTag(p); return `<div class="caserow"><div class="cx"><div class="ct">${esc(p.title)} ${p.axis?axChipHtml(p.axis):""}</div><div class="cmeta"><span>${esc(p.stage)}</span><span>${p.type==="blind"?"Blind Shadow":"Shadow Trap"}</span></div></div><span class="cstatus ${tag.cls}">${tag.txt}</span></div>`;}).join("")
-    || `<div class="empty"><b>아직 감사 기록이 없습니다</b>‘그림자 감사’ 탭에서 첫 측정을 실행해 보세요.</div>`;
+    const tag=resultTag(p); return `<div class="caserow"><div class="cx"><div class="ct">${esc(p.title)} ${p.axis?axChipHtml(p.axis):""}</div><div class="cmeta"><span>${esc(p.stage)}</span><span>${p.type==="blind"?"Blind Shadow":"Shadow Trap"}</span></div></div><span class="cstatus ${tag.cls}">${tag.txt}</span></div>`;}).join("");
+
+  const hero = onboarding ? `
+      <div class="card hero"><div class="card-pad">
+        <span class="hbadge">시작 가이드 · Getting Started</span>
+        <h1>AI 옆에서도 사람이 <span class="hl">스스로 판단</span>하는지,<br>지금부터 측정합니다</h1>
+        <div class="hsub">‘${esc(proj.name)}’ 프로젝트의 각 단계에 무작위로 <b style="color:#dfe7ec">답변 가리기</b>·<b style="color:#dfe7ec">오답 트랩</b>을 설치하고, 사람의 서술 판단을 AI가 평가해 <b style="color:#dfe7ec">불일치·미인지</b>를 잡아냅니다.</div>
+        <div class="pipe">
+          <div class="pstep"><b>1 측정</b><span>Blind·Trap 설치</span></div><span class="parw">→</span>
+          <div class="pstep"><b>2 분류</b><span>M·I·D·A·S</span></div><span class="parw">→</span>
+          <div class="pstep"><b>3 기억</b><span>Shadow Memory</span></div><span class="parw">→</span>
+          <div class="pstep"><b>4 리허설</b><span>판단력 복원</span></div>
+        </div>
+        <div class="hero-cta">
+          <button class="btn primary lg" onclick="APP.setView('probe')">그림자 감사 시작 →</button>
+          <button class="btn" onclick="APP.addProj()">+ 우리 프로젝트 등록</button>
+          <button class="btn" onclick="APP.seedDemo()">데모 데이터로 둘러보기</button>
+        </div>
+      </div></div>` : "";
+
+  const distCard = st.classified===0
+    ? `<div class="emptybig"><span class="ei">📊</span>아직 분류된 격차가 없습니다.<br>감사에서 불일치·오답 미인지가 나오면 <b>M·I·D·A·S</b> 다섯 축으로 자동 집계됩니다.</div>`
+    : `<div class="dist">${dist}</div>`;
+  const recentCard = recent
+    ? `<div class="caselist">${recent}</div>`
+    : `<div class="emptybig"><span class="ei">🕐</span>첫 감사를 실행하면 이곳에 기록이 쌓입니다.<br><button class="btn" style="margin-top:10px" onclick="APP.setView('probe')">그림자 감사 시작 →</button></div>`;
 
   $("view-dash").innerHTML=`
   <div class="grid2">
     <div>
+      ${hero}
       <div class="card"><div class="card-pad">
         <h2>🗺️ 프로젝트 위험 지도 <span class="ey">Risk Map · 실시간</span></h2>
-        <div class="sub">단계별 <b>판단 불일치율·오답 미인지율·반복</b>으로 위험 등급을 계산합니다.</div>
+        <div class="sub">${onboarding?`‘${esc(proj.name)}’에 등록된 과정입니다. 단계별 <b>불일치율·미인지율·반복</b>으로 위험 등급이 실시간 계산됩니다.`:`단계별 <b>판단 불일치율·오답 미인지율·반복</b>으로 위험 등급을 계산합니다.`}</div>
         <div class="divide"></div>
         <div class="legend"><span class="lg"><span class="sw" style="background:var(--teal)"></span>Green 안정</span><span class="lg"><span class="sw" style="background:var(--gold-d)"></span>Yellow 불일치↑</span><span class="lg"><span class="sw" style="background:var(--orange)"></span>Orange 미인지↑</span><span class="lg"><span class="sw" style="background:var(--red)"></span>Red 반복 실패</span></div>
         <div class="rmap">${rmap}</div>
@@ -551,12 +607,12 @@ function renderDash(){
         <h2>📊 M·I·D·A·S 분류 분포 <span class="ey">Classified Gaps</span></h2>
         <div class="sub">분류된 격차 ${st.classified}건 · 미분류 ${st.pending}건</div>
         <div class="divide"></div>
-        <div class="dist">${dist}</div>
+        ${distCard}
       </div></div>
       <div class="card"><div class="card-pad">
         <h2>🕐 최근 감사 <span class="ey">Recent</span></h2>
         <div class="divide"></div>
-        <div class="caselist">${recent}</div>
+        ${recentCard}
       </div></div>
     </div>
     <div class="side">
@@ -570,8 +626,17 @@ function renderDash(){
           <div class="metric c"><div class="mv">${st.rehRate}<small>%</small></div><div class="ml">리허설 이수율<br><span style="color:var(--muted2)">${st.reh}/${st.classified}</span></div></div>
         </div>
         <button class="btn primary block lg" style="margin-top:14px" onclick="APP.setView('probe')">그림자 감사 시작 →</button>
-        ${st.total===0?`<button class="btn block" style="margin-top:8px" onclick="APP.seedDemo()">데모 데이터 채우기</button>`:""}
+        ${onboarding?`<button class="btn block" style="margin-top:8px" onclick="APP.seedDemo()">데모 데이터 채우기</button>`:""}
       </div></div>
+      ${onboarding?`<div class="card"><div class="card-pad">
+        <h2>시작 3단계 <span class="ey">Setup</span></h2>
+        <div class="divide"></div>
+        <ol class="startlist">
+          <li class="done"><b>프로젝트 과정 등록</b>현재 예시 ‘${esc(proj.name)}’${proj.stages&&proj.stages.length?` · ${proj.stages.length}단계`:""} — ‘+ 새 프로젝트’로 우리 팀 과정을 등록하세요.</li>
+          <li class="${aiOn()?"done":""}"><b>AI 연결 ${aiOn()?"· 연결됨":"(선택)"}</b>‘AI 설정’에 API 키를 넣으면 단계 맞춤 문항 생성과 서술형 판단 평가가 켜집니다.</li>
+          <li><b>그림자 감사 실행</b>무작위 시점에 첫 측정을 시작하면 위 지표가 채워집니다.</li>
+        </ol>
+      </div></div>`:""}
       <div class="card" style="background:var(--steelsoft);border-color:var(--steelline)"><div class="card-pad">
         <h2 style="color:var(--steel)">🔒 순응 훅</h2>
         <div class="sub" style="color:#414b56">위 지표 — <b>불일치율·미인지율·리허설 이수율</b> — 를 인사고과·KPI에 반영하면, 사람들은 규정이 아니라 ‘평가’ 때문에 판단력을 유지합니다. 숙련이 유지·전수되는지가 처음으로 측정됩니다.</div>
@@ -848,9 +913,48 @@ async function rehearseSubmit(id){
 function renderCurrentView(){
   document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
   document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("active",b.dataset.view===state.view));
-  const map={dash:renderDash,probe:renderProbe,memory:renderMemory,rehearse:renderRehearse};
   $("view-"+state.view).classList.add("active");
+  if(!currentProj()){ renderWelcome(); return; }
+  const map={dash:renderDash,probe:renderProbe,memory:renderMemory,rehearse:renderRehearse};
   (map[state.view]||renderDash)();
+}
+function renderWelcome(){
+  $("view-"+state.view).innerHTML=`
+  <div class="welcome-wrap">
+    <div class="card hero"><div class="card-pad">
+      <span class="hbadge">시작하기 · Get Started</span>
+      <h1>먼저 <span class="hl">우리 팀 프로젝트</span>를 등록하세요</h1>
+      <div class="hsub">MIDAS TOUCH는 프로젝트의 <b style="color:#dfe7ec">각 단계</b>에 무작위로 그림자 감사(답변 가리기·오답 트랩)를 설치해, 사람이 AI 옆에서도 <b style="color:#dfe7ec">스스로 판단</b>하는지를 측정합니다. 그러려면 감사할 <b style="color:#dfe7ec">프로젝트와 과정(단계)</b>이 먼저 있어야 합니다.</div>
+      <div class="pipe">
+        <div class="pstep"><b>1 등록</b><span>프로젝트·과정</span></div><span class="parw">→</span>
+        <div class="pstep"><b>2 측정</b><span>Blind·Trap</span></div><span class="parw">→</span>
+        <div class="pstep"><b>3 분류</b><span>M·I·D·A·S</span></div><span class="parw">→</span>
+        <div class="pstep"><b>4 리허설</b><span>판단력 복원</span></div>
+      </div>
+      <div class="hero-cta">
+        <button class="btn primary lg" onclick="APP.addProj()">+ 우리 프로젝트 등록</button>
+        <button class="btn" onclick="APP.loadPresets()">예시 프로젝트로 둘러보기</button>
+      </div>
+    </div></div>
+    <div class="wgrid">
+      <div class="card"><div class="card-pad">
+        <div class="wic" style="color:var(--steel)">🫥</div>
+        <h2>답변 가리기 · Blind Shadow</h2>
+        <div class="sub">AI의 답을 가리고 원자료만 제시 → 사람이 서술한 판단과 AI의 차이로 <b>판단 불일치율</b>을 잽니다.</div>
+      </div></div>
+      <div class="card"><div class="card-pad">
+        <div class="wic" style="color:var(--gold-d)">🪤</div>
+        <h2>오답 트랩 · Shadow Trap</h2>
+        <div class="sub">미묘하게 틀린 AI 답을 몰래 노출 → 사람이 잡아내는지로 <b>오답 미인지율</b>을 잽니다.</div>
+      </div></div>
+      <div class="card"><div class="card-pad">
+        <div class="wic" style="color:var(--teal)">${aiOn()?"🟢":"⚪"}</div>
+        <h2>AI 연결 ${aiOn()?"· 연결됨":"(선택)"}</h2>
+        <div class="sub">‘AI 설정’에 API 키를 넣으면 단계에 맞춘 <b>문항 자동 생성</b>과 <b>서술형 판단 평가</b>가 켜집니다. 없으면 내장 예시(객관식)로 동작합니다.</div>
+      </div></div>
+    </div>
+    <div class="foot-note">MIDAS TOUCH · 측정 → 분류(M·I·D·A·S) → Shadow Memory → 오답 리허설 &nbsp;·&nbsp; TEAM Pactolus</div>
+  </div>`;
 }
 function refresh(){ ensureProjects(); renderProjBar(); renderCurrentView(); }
 
@@ -883,6 +987,10 @@ const APP={
   setView(v){ state.view=v; renderCurrentView(); },
   selectProj(id){ state.projId=id; session=null; stageFilter=null; refresh(); },
   addProj(){ pdraft={name:"",domain:"",stages:DEFAULT_STAGES.slice()}; openModal(projModalHTML()); setTimeout(()=>{const i=$("pdName");if(i)i.focus();},50); },
+  loadPresets(){ const names=new Set(state.projects.map(p=>p.name));
+    PRESET_PROJECTS.forEach(pp=>{ if(!names.has(pp.name)){ const c=JSON.parse(JSON.stringify(pp)); c.id="p_"+uid(); state.projects.push(c); } });
+    if(state.projects.length) state.projId=state.projects[0].id;
+    persist(); toast("예시 프로젝트를 불러왔어요"); refresh(); },
   setPName(v){ pdraft.name=v; },
   setPDomain(v){ pdraft.domain=v; },
   editStage(i,v){ pdraft.stages[i]=v; },
